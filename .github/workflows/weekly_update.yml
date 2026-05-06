@@ -60,7 +60,7 @@ jobs:
           TARGET_DATE: ${{ github.event.inputs.target_date }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
         run: |
-          python scripts/update_news.py
+          python update_news.py
 
       # 5. 변경사항 확인
       - name: 🔍 변경사항 확인
