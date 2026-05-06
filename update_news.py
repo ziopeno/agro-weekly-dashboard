@@ -1,6 +1,6 @@
 """
 Agro Weekly 자동 업데이트 스크립트
-- Claude AI (claude-sonnet-4) + web search로 지난 주 농업화학 뉴스 수집
+- Gemini AI (gemini-2.0-flash) + Google Search Grounding으로 지난 주 농업화학 뉴스 수집
 - 수집된 뉴스를 index.html의 newsDatabase에 자동 삽입
 - GitHub Actions에서 매주 월요일 08:00 KST에 실행
 """
@@ -10,12 +10,13 @@ import re
 import json
 import sys
 from datetime import datetime, timedelta
-import anthropic
+from google import genai
+from google.genai import types
 
 # ── 설정 ──────────────────────────────────────────────────────────────────
 HTML_FILE = "index.html"            # 업데이트할 HTML 파일 경로
 RESULT_FILE = "update_result.txt"  # GitHub Actions Step Summary용 결과 파일
-MODEL = "claude-sonnet-4-20250514"
+MODEL = "gemini-2.0-flash"
 MAX_TOKENS = 8000
 TARGET_ARTICLE_COUNT = 15          # 수집할 기사 수
 
@@ -91,28 +92,31 @@ tag 분류 기준:
 """
 
 
-def call_claude_with_search(prompt: str) -> list[dict]:
-    """Claude API 호출 (web search 활성화)"""
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
+def call_gemini_with_search(prompt: str) -> list[dict]:
+    """Gemini API 호출 (Google Search Grounding 활성화)"""
+    api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        raise EnvironmentError("ANTHROPIC_API_KEY 환경변수가 설정되지 않았습니다.")
+        raise EnvironmentError("GEMINI_API_KEY 환경변수가 설정되지 않았습니다.")
 
-    client = anthropic.Anthropic(api_key=api_key)
+    client = genai.Client(api_key=api_key)
 
-    print("🔍 Claude AI 웹 검색 시작...")
-    response = client.messages.create(
+    print("🔍 Gemini AI 웹 검색 시작...")
+    response = client.models.generate_content(
         model=MODEL,
-        max_tokens=MAX_TOKENS,
-        tools=[{"type": "web_search_20250305", "name": "web_search"}],
-        messages=[{"role": "user", "content": prompt}]
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            max_output_tokens=MAX_TOKENS,
+            tools=[types.Tool(google_search=types.GoogleSearch())],
+        ),
     )
 
-    # 텍스트 블록만 추출
-    full_text = " ".join(
-        block.text for block in response.content if block.type == "text"
-    )
+    full_text = response.text or ""
 
-    print(f"📝 응답 수신 완료 (토큰: input={response.usage.input_tokens}, output={response.usage.output_tokens})")
+    usage = response.usage_metadata
+    print(
+        f"📝 응답 수신 완료 "
+        f"(토큰: input={usage.prompt_token_count}, output={usage.candidates_token_count})"
+    )
 
     # JSON 파싱
     json_text = full_text.strip()
@@ -278,13 +282,13 @@ def main():
             write_result_summary(date_key, [], False)
             sys.exit(0)
 
-    # 3. Claude API 호출
+    # 3. Gemini API 호출
     prompt = build_prompt(start_date, end_date)
     try:
-        raw_articles = call_claude_with_search(prompt)
+        raw_articles = call_gemini_with_search(prompt)
         print(f"✅ {len(raw_articles)}건 수집 완료")
     except Exception as e:
-        print(f"❌ Claude API 호출 실패: {e}")
+        print(f"❌ Gemini API 호출 실패: {e}")
         sys.exit(1)
 
     # 4. 데이터 정제
