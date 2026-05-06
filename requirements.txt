@@ -1,4 +1,4 @@
 pandas
 openpyxl
-anthropic
+google-genai
 requests
