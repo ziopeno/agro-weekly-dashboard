@@ -2,7 +2,7 @@
 Agro Weekly 자동 업데이트 스크립트
 - Gemini AI (gemini-2.0-flash) + Google Search Grounding으로 지난 주 농업화학 뉴스 수집
 - 수집된 뉴스를 index.html의 newsDatabase에 자동 삽입
-- GitHub Actions에서 매주 월요일 08:00 KST에 실행
+- GitHub Actions에서 매일 08:00 KST에 실행
 """
 
 import os
@@ -24,32 +24,26 @@ TAG_MAP = {"등록": "reg", "개발": "dev", "영업": "sales", "기획": "plan"
 
 
 def get_previous_week_range() -> tuple[str, str]:
-    """
-    지난 주 월요일~일요일 날짜 범위 반환 (KST 기준)
-    환경변수 TARGET_DATE가 있으면 그 주를 기준으로 계산
-    """
     target_env = os.environ.get("TARGET_DATE", "").strip()
     if target_env:
         try:
             ref = datetime.strptime(target_env, "%Y-%m-%d")
         except ValueError:
-            print(f"⚠️  TARGET_DATE 형식 오류: {target_env}. 자동 계산으로 전환합니다.")
-            ref = datetime.utcnow() + timedelta(hours=9)  # KST
+            ref = datetime.utcnow() + timedelta(hours=9)
     else:
-        ref = datetime.utcnow() + timedelta(hours=9)  # 현재 KST 시각
+        ref = datetime.utcnow() + timedelta(hours=9)
 
-    # 이번 주 월요일 (weekday: 0=월, 6=일)
-    this_monday = ref - timedelta(days=ref.weekday())
-    # 지난 주 월요일~일요일
-    last_monday = this_monday - timedelta(days=7)
-    last_sunday = last_monday + timedelta(days=6)
-
-    return last_monday.strftime("%Y-%m-%d"), last_sunday.strftime("%Y-%m-%d")
+    yesterday = ref - timedelta(days=1)
+    date_str = yesterday.strftime("%Y-%m-%d")
+    return date_str, date_str  # 어제 하루
 
 
 def get_date_key(end_date: str) -> str:
-    """newsDatabase에 사용할 날짜 키 (지난 주 일요일 날짜)"""
-    return end_date
+    # 사이드바 키는 이번 주 일요일 유지
+    ref = datetime.strptime(end_date, "%Y-%m-%d")
+    days_until_sunday = 6 - ref.weekday()
+    this_sunday = ref + timedelta(days=days_until_sunday)
+    return this_sunday.strftime("%Y-%m-%d")
 
 
 def build_prompt(start_date: str, end_date: str) -> str:
@@ -217,62 +211,43 @@ def validate_and_clean(articles: list[dict]) -> list[dict]:
 
     return cleaned
 
-
 def inject_into_html(articles: list[dict], date_key: str) -> bool:
-    """
-    HTML 파일의 newsDatabase에 새 날짜 항목을 삽입.
-    이미 해당 날짜가 존재하면 건너뜀.
-    Returns: True if injected, False if already exists
-    """
     with open(HTML_FILE, "r", encoding="utf-8") as f:
         html = f.read()
 
-    # 이미 해당 날짜가 있는지 확인
-    if f'"{date_key}"' in html:
-        print(f"ℹ️  {date_key} 날짜가 이미 newsDatabase에 존재합니다. 건너뜁니다.")
-        return False
-
-    # 새 항목 JSON 생성
-    new_entry = json.dumps(articles, ensure_ascii=False, indent=4)
-    # 들여쓰기 맞추기 (4칸 → 8칸)
-    new_entry = "\n".join("    " + line if line.strip() else line for line in new_entry.splitlines())
-
-    new_block = f'    "{date_key}": {new_entry},\n'
-
-    # newsDatabase = { 바로 다음 줄에 삽입
     marker = "const newsDatabase = {"
     if marker not in html:
-        raise ValueError(f"HTML에서 '{marker}'를 찾을 수 없습니다. HTML 파일 구조를 확인하세요.")
+        raise ValueError(f"HTML에서 '{marker}'를 찾을 수 없습니다.")
 
-    html_updated = html.replace(
-        marker,
-        marker + "\n" + new_block,
-        1  # 첫 번째 occurrence만 교체
-    )
+    if f'"{date_key}"' in html:
+        # 기존 주 키가 있으면 배열 끝에 추가
+        new_items = ",\n        ".join(
+            json.dumps(a, ensure_ascii=False) for a in articles
+        )
+        # 해당 주 배열의 마지막 } 앞에 삽입
+        pattern = rf'("{date_key}":\s*\[)([\s\S]*?)(\])'
+        def append_articles(m):
+            existing = m.group(2).rstrip()
+            separator = ",\n        " if existing.strip() else "\n        "
+            return m.group(1) + existing + separator + new_items + "\n    " + m.group(3)
+        html_updated = re.sub(pattern, append_articles, html, count=1)
+        print(f"📎 {date_key} 기존 항목에 {len(articles)}건 추가")
+    else:
+        # 해당 주 키가 없으면 새로 생성
+        new_entry = json.dumps(articles, ensure_ascii=False, indent=4)
+        new_entry = "\n".join("    " + line if line.strip() else line for line in new_entry.splitlines())
+        new_block = f'    "{date_key}": {new_entry},\n'
+        html_updated = html.replace(marker, marker + "\n" + new_block, 1)
+        print(f"🆕 {date_key} 신규 항목 생성")
 
     # 타임스탬프 업데이트
     now_kst = (datetime.utcnow() + timedelta(hours=9)).strftime("%Y-%m-%d %H:%M")
-    # 다음 주 월요일 계산
-    next_update = (datetime.utcnow() + timedelta(hours=9) + timedelta(days=7))
-    next_monday = next_update - timedelta(days=next_update.weekday())
-    next_str = next_monday.strftime("%Y-%m-%d 08:00")
-
-    html_updated = re.sub(
-        r"마지막 업데이트: [\d\-]+ [\d:]+",
-        f"마지막 업데이트: {now_kst}",
-        html_updated
-    )
-    html_updated = re.sub(
-        r"차기 업데이트 예정: [\d\-]+ [\d:]+",
-        f"차기 업데이트 예정: {next_str}",
-        html_updated
-    )
+    html_updated = re.sub(r"마지막 업데이트: [\d\-]+ [\d:]+", f"마지막 업데이트: {now_kst}", html_updated)
 
     with open(HTML_FILE, "w", encoding="utf-8") as f:
         f.write(html_updated)
 
     return True
-
 
 def write_result_summary(date_key: str, articles: list[dict], success: bool):
     """GitHub Actions Step Summary용 결과 파일 작성"""
