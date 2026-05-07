@@ -168,8 +168,17 @@ def validate_and_clean(articles: list[dict]) -> list[dict]:
         article["body"] = [b.strip() for b in article["body"] if b.strip()]
 
         # link 기본값
-        if not article.get("link") or article["link"] in ["", "#", "N/A"]:
-            article["link"] = "#"
+        link = article.get("link", "").strip()
+        # 구글 검색 URL / 홈페이지 주소 / 빈값 거부
+        is_google_search = "google.com/search" in link or link.startswith("https://www.google.com")
+        is_empty = not link or link in ["", "#", "N/A"]
+        is_homepage = link.rstrip("/") in [
+            "https://www.agropages.com",
+            "https://www.agrow.com",
+            "https://www.reuters.com",
+            "https://www.bloomberg.com",
+        ]
+        article["link"] = "#" if (is_google_search or is_empty or is_homepage) else link
 
         cleaned.append(article)
 
