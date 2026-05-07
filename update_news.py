@@ -16,7 +16,7 @@ from google.genai import types
 # ── 설정 ──────────────────────────────────────────────────────────────────
 HTML_FILE = "index.html"            # 업데이트할 HTML 파일 경로
 RESULT_FILE = "update_result.txt"  # GitHub Actions Step Summary용 결과 파일
-MODEL = "gemini-2.0-flash"
+MODEL = "gemini-1.5-flash"
 MAX_TOKENS = 8000
 TARGET_ARTICLE_COUNT = 15          # 수집할 기사 수
 
@@ -112,6 +112,36 @@ def call_gemini_with_search(prompt: str) -> list[dict]:
             tools=[types.Tool(google_search=types.GoogleSearch())],
         ),
     )
+import time
+
+def call_gemini_with_search(prompt: str) -> list[dict]:
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        raise EnvironmentError("GEMINI_API_KEY 환경변수가 설정되지 않았습니다.")
+
+    client = genai.Client(api_key=api_key)
+
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            print(f"🔍 Gemini AI 웹 검색 시작... (시도 {attempt + 1}/{max_retries})")
+            response = client.models.generate_content(
+                model=MODEL,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    max_output_tokens=MAX_TOKENS,
+                    tools=[types.Tool(google_search=types.GoogleSearch())],
+                ),
+            )
+            break  # 성공 시 루프 탈출
+
+        except Exception as e:
+            if "429" in str(e) and attempt < max_retries - 1:
+                wait = 60 * (attempt + 1)  # 60초, 120초 순으로 대기
+                print(f"⚠️  Rate limit 감지. {wait}초 후 재시도...")
+                time.sleep(wait)
+            else:
+                raise  # 마지막 시도도 실패하면 에러 전파
 
     full_text = response.text or ""
 
