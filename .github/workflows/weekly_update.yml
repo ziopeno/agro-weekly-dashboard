@@ -3,7 +3,7 @@ name: 🌾 Agro Weekly Auto-Update
 on:
   # 매주 일요일 23:00 UTC = 월요일 08:00 KST
   schedule:
-    - cron: '0 23 * * 0'
+    - cron: '0 23 * * *'
 
   # 수동 실행 (테스트용 - GitHub Actions 탭에서 직접 실행 가능)
   workflow_dispatch:
