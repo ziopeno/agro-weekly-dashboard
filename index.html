@@ -373,7 +373,7 @@
                 <div class="timestamp-info">
                     마지막 업데이트: 2026-04-30 17:10&nbsp;&nbsp;|&nbsp;&nbsp;
                     차기 업데이트 예정: 2026-05-07 09:00
-                    <button class="update-trigger-btn" onclick="openAiUpdate()">🤖 AI 업데이트</button>
+                    <button class="update-trigger-btn" onclick="openAiUpdate()">📊 업데이트 현황</button>
                 </div>
             </div>
         </header>
@@ -418,20 +418,11 @@
     <div id="ai-update-overlay">
         <div id="ai-update-box">
             <div id="ai-update-header">
-                <div id="ai-update-title">🤖 AI 주간 뉴스 업데이트</div>
+                <div id="ai-update-title">📊 주간 뉴스 현황</div>
                 <button id="ai-update-close" onclick="closeAiUpdate()">✕</button>
             </div>
             <div id="ai-update-body">
-                <div class="update-status info">
-                    Claude AI가 지난 주의 농업화학 뉴스를 자동으로 검색하고 요약합니다.<br>
-                    결과는 JSON 형식으로 생성되며, 복사 후 newsDatabase에 추가하면 됩니다.
-                </div>
-                <div style="margin-bottom:12px;">
-                    <label style="font-size:0.85em;font-weight:600;color:#4a5568;">검색 기준 주간:</label>
-                    <input type="week" id="update-week-input" style="margin-left:8px;padding:5px 10px;border:1px solid #cbd5e0;border-radius:6px;font-size:0.85em;">
-                </div>
-                <button class="update-btn" id="update-run-btn" onclick="runAiUpdate()">🔍 AI 뉴스 검색 시작</button>
-                <div id="update-result" style="margin-top:16px;"></div>
+                <div id="update-result"></div>
             </div>
         </div>
     </div>
@@ -7494,138 +7485,92 @@ const agrowExcelData = {"2026-04-27": ["1. 일본 Kumiai社 중국에서 Pyroxas
             else resetToHome();
         }
 
-        // ── AI 업데이트 모달 ──
+        // ── AI 업데이트 모달 → 최신 데이터 현황 표시 ──
         function openAiUpdate() {
-            const overlay = document.getElementById('ai-update-overlay');
-            overlay.classList.add('open');
-            // Default: last week
-            const d = new Date();
-            d.setDate(d.getDate() - 7);
-            const y = d.getFullYear();
-            const w = getISOWeek(d);
-            document.getElementById('update-week-input').value = `${y}-W${String(w).padStart(2,'0')}`;
+            document.getElementById('ai-update-overlay').classList.add('open');
+            renderUpdateStatus();
         }
+
         function closeAiUpdate() {
             document.getElementById('ai-update-overlay').classList.remove('open');
         }
+
         document.getElementById('ai-update-overlay').addEventListener('click', function(e) {
             if (e.target === this) closeAiUpdate();
         });
 
-        function getISOWeek(date) {
-            const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-            d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
-            const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-            return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-        }
-
-        async function runAiUpdate() {
-            const weekVal = document.getElementById('update-week-input').value;
-            const btn = document.getElementById('update-run-btn');
+        function renderUpdateStatus() {
             const resultDiv = document.getElementById('update-result');
-            if (!weekVal) { alert('검색 주간을 선택해주세요.'); return; }
-
-            // Parse week to date range
-            const [yearStr, weekStr] = weekVal.split('-W');
-            const year = parseInt(yearStr), week = parseInt(weekStr);
-            const jan4 = new Date(year, 0, 4);
-            const startOfWeek = new Date(jan4);
-            startOfWeek.setDate(jan4.getDate() - ((jan4.getDay() || 7) - 1) + (week - 1) * 7);
-            const endOfWeek = new Date(startOfWeek);
-            endOfWeek.setDate(startOfWeek.getDate() + 6);
-            const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-            const startDate = fmt(startOfWeek), endDate = fmt(endOfWeek);
-
-            btn.disabled = true;
-            btn.textContent = '⏳ 검색 중...';
-            resultDiv.innerHTML = '<div class="update-status info">🔍 Claude AI가 뉴스를 검색하고 있습니다. 잠시 기다려주세요...</div>';
-
-            const prompt = `당신은 글로벌 농업화학(Agro-Chemical) 업계 전문 뉴스 큐레이터입니다.
-${startDate}부터 ${endDate}까지의 기간에 발생한 주요 글로벌 농업화학 뉴스 10~15건을 웹에서 검색하여 아래 JSON 형식으로만 응답하세요.
-
-반드시 실제 존재하는 기사를 검색하고, 각 기사의 직접 URL을 포함하세요.
-
-JSON 배열 형식 (다른 텍스트 없이 JSON만):
-[
-  {
-    "tag": "reg|dev|sales|plan 중 하나",
-    "dept": "등록|개발|영업|기획 중 하나",
-    "title": "번호. 기사 제목 (한국어로 번역)",
-    "body": ["핵심 내용 1", "핵심 내용 2"],
-    "source": "출처 매체명 (영문)",
-    "link": "직접 기사 URL (홈페이지가 아닌 해당 기사의 정확한 URL)"
-  }
-]
-
-tag 분류 기준:
-- reg: 농약 등록/규제/법률
-- dev: 신기술/신제품/R&D/M&A
-- sales: 기업 실적/매출/투자
-- plan: 시장 동향/정책/무역`;
-
-            try {
-                const response = await fetch('https://api.anthropic.com/v1/messages', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        model: 'claude-sonnet-4-20250514',
-                        max_tokens: 4000,
-                        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-                        messages: [{ role: 'user', content: prompt }]
-                    })
-                });
-                const data = await response.json();
-                const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
-                const clean = text.replace(/```json|```/g, '').trim();
-                let parsed;
-                try {
-                    parsed = JSON.parse(clean);
-                } catch {
-                    const m = clean.match(/\[[\s\S]*\]/);
-                    parsed = m ? JSON.parse(m[0]) : null;
-                }
-                if (parsed && Array.isArray(parsed)) {
-                    const dateKey = endDate;
-                    const jsonStr = JSON.stringify({ [dateKey]: parsed }, null, 2);
-                    resultDiv.innerHTML = `
-                        <div class="update-status success">✅ ${parsed.length}건의 기사를 수집했습니다! 아래 코드를 newsDatabase 최상단에 추가하세요.</div>
-                        <div style="margin-bottom:8px;display:flex;gap:8px;">
-                            <button class="update-btn" style="font-size:0.82em;padding:7px 14px;" onclick="applyNewsData(${JSON.stringify(dateKey)}, ${JSON.stringify(parsed)})">✅ 지금 바로 적용</button>
-                            <button class="update-btn" style="font-size:0.82em;padding:7px 14px;background:#718096;" onclick="navigator.clipboard.writeText(document.querySelector('#update-result pre').textContent)">📋 코드 복사</button>
-                        </div>
-                        <pre>${escHtml(jsonStr)}</pre>`;
-                } else {
-                    resultDiv.innerHTML = `<div class="update-status error">❌ JSON 파싱 실패. 원시 응답:</div><pre>${escHtml(text.slice(0,2000))}</pre>`;
-                }
-            } catch(e) {
-                resultDiv.innerHTML = `<div class="update-status error">❌ 오류: ${escHtml(String(e))}</div>
-                <div class="update-status info" style="margin-top:8px;">💡 <strong>자동화 설정 방법</strong><br>
-                진정한 매주 월요일 오전 8시 자동 업데이트를 구현하려면 아래 방법 중 하나를 사용하세요:<br><br>
-                <strong>① GitHub Actions (무료, 권장)</strong><br>
-                .github/workflows/weekly-update.yml 파일을 만들고 cron: '0 23 * * 0' (KST 월요일 08:00)으로 설정<br><br>
-                <strong>② Cloudflare Workers</strong><br>
-                KV Storage + Cron Trigger (매주 일요일 23:00 UTC = 월요일 08:00 KST)<br><br>
-                <strong>③ Google Apps Script</strong><br>
-                시간 기반 트리거로 매주 실행, 결과를 Google Sheets나 Firebase에 저장</div>`;
+            const dates = Object.keys(newsDatabase).sort().reverse();
+            if (dates.length === 0) {
+                resultDiv.innerHTML = '<div class="update-status error">저장된 뉴스 데이터가 없습니다.</div>';
+                return;
             }
-            btn.disabled = false;
-            btn.textContent = '🔍 AI 뉴스 검색 시작';
+
+            const latestDate = dates[0];
+            const latestArticles = newsDatabase[latestDate];
+            const tagCount = { reg: 0, dev: 0, sales: 0, plan: 0 };
+            latestArticles.forEach(a => { if (tagCount[a.tag] !== undefined) tagCount[a.tag]++; });
+            const tagLabel = { reg: '등록', dev: '개발', sales: '영업', plan: '기획' };
+            const tagColor = { reg: 'var(--reg-color)', dev: 'var(--dev-color)', sales: 'var(--sales-color)', plan: 'var(--plan-color)' };
+
+            const tagBadges = Object.entries(tagCount)
+                .filter(([,v]) => v > 0)
+                .map(([k,v]) => `<span style="background:${tagColor[k]};color:white;border-radius:12px;padding:2px 10px;font-size:0.8em;font-weight:700;">${tagLabel[k]} ${v}</span>`)
+                .join(' ');
+
+            const articleList = latestArticles.map(a => `
+                <div style="padding:8px 0;border-bottom:1px solid #f0f4f8;display:flex;align-items:flex-start;gap:8px;">
+                    <span style="background:${tagColor[a.tag]};color:white;border-radius:10px;padding:1px 8px;font-size:0.72em;font-weight:700;white-space:nowrap;margin-top:2px;">${tagLabel[a.tag]}</span>
+                    <span style="font-size:0.88em;color:#2d3748;line-height:1.5;">${a.title}</span>
+                </div>`).join('');
+
+            const historyItems = dates.slice(0, 8).map(d => {
+                const cnt = newsDatabase[d].length;
+                const isLatest = d === latestDate;
+                return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-radius:6px;cursor:pointer;${isLatest ? 'background:#e6f4ea;font-weight:700;color:var(--fhn-green);' : 'color:#4a5568;'}" onclick="goToDate('${d}')">
+                    <span>📅 ${d}</span>
+                    <span style="font-size:0.82em;color:#718096;">${cnt}건</span>
+                </div>`;
+            }).join('');
+
+            resultDiv.innerHTML = `
+                <div class="update-status success" style="margin-bottom:16px;">
+                    ✅ 최신 데이터: <strong>${latestDate}</strong> — 총 <strong>${latestArticles.length}건</strong>
+                    <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">${tagBadges}</div>
+                </div>
+
+                <div style="margin-bottom:16px;">
+                    <div style="font-size:0.82em;font-weight:700;color:#718096;margin-bottom:8px;letter-spacing:0.04em;">최신 주 기사 목록</div>
+                    ${articleList}
+                </div>
+
+                <div style="margin-bottom:8px;">
+                    <div style="font-size:0.82em;font-weight:700;color:#718096;margin-bottom:6px;letter-spacing:0.04em;">최근 업데이트 이력</div>
+                    ${historyItems}
+                </div>
+
+                <div style="margin-top:16px;text-align:center;">
+                    <button class="update-btn" onclick="goToDate('${latestDate}')">📋 최신 주 바로 보기</button>
+                </div>
+                <div class="update-status info" style="margin-top:14px;font-size:0.82em;">
+                    💡 매주 월요일 08:00 KST에 GitHub Actions가 자동으로 업데이트합니다.
+                </div>`;
         }
 
-        function applyNewsData(dateKey, articles) {
-            if (newsDatabase[dateKey]) {
-                if (!confirm(`${dateKey} 데이터가 이미 존재합니다. 덮어쓰시겠습니까?`)) return;
-            }
-            newsDatabase[dateKey] = articles;
-            buildSidebar();
-            buildCompanyFilter();
-            loadData(dateKey);
+        function goToDate(dateKey) {
             closeAiUpdate();
-            alert(`✅ ${dateKey} 데이터가 적용되었습니다! (이 세션에서만 유효, 영구 저장은 HTML 파일 수정 필요)`);
-        }
-
-        function escHtml(str) {
-            return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            // 사이드바에서 해당 날짜 항목 클릭
+            const items = document.querySelectorAll('.week-item');
+            for (const item of items) {
+                if (item.innerText.trim() === dateKey) {
+                    item.click();
+                    item.scrollIntoView({ block: 'center' });
+                    return;
+                }
+            }
+            // 직접 로드 (사이드바 항목 못 찾을 경우)
+            loadData(dateKey);
         }
 
         function showAgrowPopup(dateKey, articleTitle) {
