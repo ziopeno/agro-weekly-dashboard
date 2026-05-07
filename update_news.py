@@ -60,7 +60,10 @@ def build_prompt(start_date: str, end_date: str) -> str:
 
 ⚠️ 중요 지침:
 1. 실제로 웹에서 검색하여 실존하는 기사만 포함하세요.
-2. "link" 필드는 반드시 해당 기사의 직접 URL (기사 permalink)을 넣으세요. 홈페이지 주소 금지.
+2. "link" 필드는 반드시 해당 기사의 직접 URL (기사 permalink)을 넣으세요.
+   - 홈페이지 주소 금지 (예: https://www.reuters.com 이런 형태 금지)
+   - 구글 검색 URL 절대 금지 (예: https://www.google.com/search?q=... 금지)
+   - 직접 URL을 찾을 수 없는 기사는 목록에서 제외하세요.
 3. 기사를 못 찾으면 그 항목을 제외하세요.
 4. JSON 외 다른 텍스트, 마크다운 코드블록 없이 순수 JSON 배열만 출력하세요.
 
