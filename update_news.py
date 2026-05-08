@@ -16,7 +16,7 @@ from google.genai import types
 # ── 설정 ──────────────────────────────────────────────────────────────────
 HTML_FILE = "index.html"            # 업데이트할 HTML 파일 경로
 RESULT_FILE = "update_result.txt"  # GitHub Actions Step Summary용 결과 파일
-MODEL = "gemini-2.5-flash-preview-04-17"
+MODEL = "gemini-2.0-flash"
 MAX_TOKENS = 8000
 TARGET_ARTICLE_COUNT = 15          # 수집할 기사 수
 
@@ -87,27 +87,6 @@ tag 분류 기준:
 
 반드시 다양한 지역(북미, 유럽, 아시아, 중남미)과 카테고리(reg/dev/sales/plan)를 균형 있게 포함하세요.
 """
-
-
-def call_gemini_with_search(prompt: str) -> list[dict]:
-    """Gemini API 호출 (Google Search Grounding 활성화)"""
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        raise EnvironmentError("GEMINI_API_KEY 환경변수가 설정되지 않았습니다.")
-
-    client = genai.Client(api_key=api_key)
-
-    print("🔍 Gemini AI 웹 검색 시작...")
-    response = client.models.generate_content(
-        model=MODEL,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            max_output_tokens=MAX_TOKENS,
-            tools=[types.Tool(google_search=types.GoogleSearch())],
-        ),
-    )
-import time
-
 def call_gemini_with_search(prompt: str) -> list[dict]:
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
