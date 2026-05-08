@@ -33,9 +33,12 @@ def get_previous_week_range() -> tuple[str, str]:
     else:
         ref = datetime.utcnow() + timedelta(hours=9)
 
-    yesterday = ref - timedelta(days=1)
-    date_str = yesterday.strftime("%Y-%m-%d")
-    return date_str, date_str  # 어제 하루
+    # 지난 주 월요일~일요일
+    this_monday = ref - timedelta(days=ref.weekday())
+    last_monday = this_monday - timedelta(days=7)
+    last_sunday = last_monday + timedelta(days=6)
+
+    return last_monday.strftime("%Y-%m-%d"), last_sunday.strftime("%Y-%m-%d")
 
 
 def get_date_key(end_date: str) -> str:
@@ -265,7 +268,7 @@ def main():
         raw_articles = call_claude_with_search(prompt)
         print(f"✅ {len(raw_articles)}건 수집 완료")
     except Exception as e:
-        print(f"❌ Gemini API 호출 실패: {e}")
+        print(f"❌ Claude API 호출 실패: {e}")
         sys.exit(1)
 
     # 4. 데이터 정제
