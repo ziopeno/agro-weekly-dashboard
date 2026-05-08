@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 # ── 설정 ──────────────────────────────────────────────────────────────────
 HTML_FILE = "index.html"            # 업데이트할 HTML 파일 경로
 RESULT_FILE = "update_result.txt"  # GitHub Actions Step Summary용 결과 파일
-model='claude-sonnet-4-6'
+MODEL='claude-sonnet-4-6'
 MAX_TOKENS = 8000
 TARGET_ARTICLE_COUNT = 15          # 수집할 기사 수
 
