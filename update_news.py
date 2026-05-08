@@ -9,6 +9,7 @@ import os
 import re
 import json
 import sys
+import time  # <--- 이 줄을 추가하세요!
 from datetime import datetime, timedelta
 from google import genai
 from google.genai import types
