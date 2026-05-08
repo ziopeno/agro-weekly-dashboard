@@ -56,7 +56,7 @@ jobs:
       # 4. Claude AI 뉴스 업데이트 스크립트 실행
       - name: 🤖 Claude AI 뉴스 검색 및 HTML 업데이트
         env:
-          GEMINI_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           TARGET_DATE: ${{ github.event.inputs.target_date }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
         run: |
