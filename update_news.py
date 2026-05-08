@@ -39,11 +39,12 @@ def get_previous_week_range() -> tuple[str, str]:
 
 
 def get_date_key(end_date: str) -> str:
-    # 사이드바 키는 이번 주 일요일 유지
-    ref = datetime.strptime(end_date, "%Y-%m-%d")
-    days_until_sunday = 6 - ref.weekday()
-    this_sunday = ref + timedelta(days=days_until_sunday)
-    return this_sunday.strftime("%Y-%m-%d")
+    target_env = os.environ.get("TARGET_DATE", "").strip()
+    if target_env:
+        return target_env  # 수동 입력 날짜를 키로 사용
+    # 자동 실행 시 KST 오늘 날짜 (cron이 월요일 08:00 KST에 실행되므로 월요일 날짜가 키)
+    now_kst = datetime.utcnow() + timedelta(hours=9)
+    return now_kst.strftime("%Y-%m-%d")
 
 
 def build_prompt(start_date: str, end_date: str) -> str:
