@@ -9,15 +9,14 @@ import os
 import re
 import json
 import sys
-import time  # <--- 이 줄을 추가하세요!
+import time 
+import anthropic
 from datetime import datetime, timedelta
-from google import genai
-from google.genai import types
 
 # ── 설정 ──────────────────────────────────────────────────────────────────
 HTML_FILE = "index.html"            # 업데이트할 HTML 파일 경로
 RESULT_FILE = "update_result.txt"  # GitHub Actions Step Summary용 결과 파일
-MODEL = "gemini-2.0-flash"
+MODEL = "claude-sonnet-4-20250514"
 MAX_TOKENS = 8000
 TARGET_ARTICLE_COUNT = 15          # 수집할 기사 수
 
@@ -88,52 +87,32 @@ tag 분류 기준:
 
 반드시 다양한 지역(북미, 유럽, 아시아, 중남미)과 카테고리(reg/dev/sales/plan)를 균형 있게 포함하세요.
 """
-def call_gemini_with_search(prompt: str) -> list[dict]:
-    api_key = os.environ.get("GEMINI_API_KEY")
+def call_claude_with_search(prompt: str) -> list[dict]:
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
-        raise EnvironmentError("GEMINI_API_KEY 환경변수가 설정되지 않았습니다.")
+        raise EnvironmentError("ANTHROPIC_API_KEY 환경변수가 설정되지 않았습니다.")
 
-    client = genai.Client(api_key=api_key)
+    client = anthropic.Anthropic(api_key=api_key)
 
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            print(f"🔍 Gemini AI 웹 검색 시작... (시도 {attempt + 1}/{max_retries})")
-            response = client.models.generate_content(
-                model=MODEL,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    max_output_tokens=MAX_TOKENS,
-                    tools=[types.Tool(google_search=types.GoogleSearch())],
-                ),
-            )
-            break  # 성공 시 루프 탈출
-
-        except Exception as e:
-            if "429" in str(e) and attempt < max_retries - 1:
-                wait = 60 * (attempt + 1)  # 60초, 120초 순으로 대기
-                print(f"⚠️  Rate limit 감지. {wait}초 후 재시도...")
-                time.sleep(wait)
-            else:
-                raise  # 마지막 시도도 실패하면 에러 전파
-
-    full_text = response.text or ""
-
-    usage = response.usage_metadata
-    print(
-        f"📝 응답 수신 완료 "
-        f"(토큰: input={usage.prompt_token_count}, output={usage.candidates_token_count})"
+    print("🔍 Claude AI 웹 검색 시작...")
+    response = client.messages.create(
+        model=MODEL,
+        max_tokens=MAX_TOKENS,
+        tools=[{"type": "web_search_20250305", "name": "web_search"}],
+        messages=[{"role": "user", "content": prompt}]
     )
 
-    # JSON 파싱
-    json_text = full_text.strip()
-    # 마크다운 코드블록 제거 (혹시 포함된 경우)
-    json_text = re.sub(r"```json\s*|```\s*", "", json_text).strip()
+    full_text = " ".join(
+        block.text for block in response.content if block.type == "text"
+    )
+
+    print(f"📝 응답 수신 완료 (토큰: input={response.usage.input_tokens}, output={response.usage.output_tokens})")
+
+    json_text = re.sub(r"```json\s*|```\s*", "", full_text.strip()).strip()
 
     try:
         articles = json.loads(json_text)
     except json.JSONDecodeError:
-        # 배열 부분만 추출 시도
         match = re.search(r"\[[\s\S]*\]", json_text)
         if match:
             articles = json.loads(match.group(0))
@@ -282,7 +261,7 @@ def main():
     # 3. Gemini API 호출
     prompt = build_prompt(start_date, end_date)
     try:
-        raw_articles = call_gemini_with_search(prompt)
+        raw_articles = call_claude_with_search(prompt)
         print(f"✅ {len(raw_articles)}건 수집 완료")
     except Exception as e:
         print(f"❌ Gemini API 호출 실패: {e}")
